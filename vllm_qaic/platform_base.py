@@ -13,7 +13,7 @@ import functools
 
 import torch
 
-from vllm.logger import init_logger
+from vllm_qaic.logger import init_logger
 from vllm.platforms import Platform, PlatformEnum
 from vllm.utils.import_utils import PlaceholderModule
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
@@ -163,6 +163,10 @@ class QaicPlatform(Platform):
     @classmethod
     def get_worker_cls(cls):
         return cls.worker_cls
+
+    @classmethod
+    def manual_seed_all(cls, seed: int) -> None:
+        pass
 
     @classmethod
     def check_and_update_config(cls, vllm_config: VllmConfig) -> None:
@@ -451,6 +455,13 @@ class QaicPlatform(Platform):
                     vllm_config, model_config, scheduler_config, model_type
                 )
 
+        if cls.is_aot and scheduler_config.async_scheduling:
+            logger.warning(
+                "QAIC currently does not support async scheduling; "
+                "Falling back to non-async scheduling."
+            )
+            scheduler_config.async_scheduling = False
+
     @classmethod
     def is_pin_memory_available(cls) -> bool:
         logger.warning("Pin memory is not supported on Qaic.")
@@ -475,6 +486,7 @@ class QaicPlatform(Platform):
         cls,
         selected_backend: AttentionBackendEnum,
         attn_selector_config,
+        num_heads: int | None = None,
     ) -> str:
         # for eager mode
         if attn_selector_config.use_mla:
