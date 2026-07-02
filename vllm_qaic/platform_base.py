@@ -354,6 +354,11 @@ class QaicPlatform(Platform):
                     scheduler_config.max_num_seqs * __prefill_seq_len,
                     scheduler_config.max_num_batched_tokens,
                 )
+            # Reset max_num_scheduled_tokens so that
+            # _set_max_num_scheduled_tokens() recalculates it from the
+            # (now-overridden) max_num_batched_tokens when __post_init__
+            # re-runs in the EngineCore subprocess (core.py:1038).
+            scheduler_config.max_num_scheduled_tokens = None
 
         if cls.is_aot:
             # Intel OpenMP tuning — only activate when user has already preloaded
