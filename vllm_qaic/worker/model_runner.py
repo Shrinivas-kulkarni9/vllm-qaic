@@ -354,11 +354,7 @@ class QaicModelRunnerPyt(GPUModelRunner):
         intermediate_tensors: IntermediateTensors | None = None,
     ) -> ModelRunnerOutput | IntermediateTensors | None:
         with optional_qaic_profiling(
-<<<<<<< HEAD
             profiling_dir=envs.VLLM_TORCH_QAIC_PROFILER_DIR,
-=======
-            profiling_dir=getattr(envs, "VLLM_TORCH_PROFILER_DIR", None),
->>>>>>> 8718d9c (Rebase plugin to vLLM 0.23.0)
             profiling_wrapper=qaic_profile.ProfileForwardWithSampling,
             model=self.model,  # type: ignore[has-type]
             n_samples=10,
@@ -675,6 +671,7 @@ class QaicModelRunnerAoT(GPUModelRunner):
         if spec_tokens and any(len(v) > 0 for v in spec_tokens.values()):
             return self.decode_ks[-1]  # proposals exist → full SpD kernel
         return 0  # no proposals → cheap fallback kernel
+
     def _pool(
         self,
         hidden_states: torch.Tensor,
