@@ -387,7 +387,8 @@ class QAicAttentionBackendImpl(AttentionImpl):
             backend = (
                 "hvx" if os.environ.get("QAIC_PAGED_ATTN_HMX", "1") == "0" else "hmx"
             )
-        if backend.lower() == "hvx" and self.head_size > 256:
+        backend = backend.lower()
+        if backend == "hvx" and self.head_size > 256:
             return False
         if self.num_heads % self.num_kv_heads != 0:
             return False
@@ -416,6 +417,69 @@ class QAicAttentionBackendImpl(AttentionImpl):
             native_shape = (num_actual_tokens, self.num_kv_heads, self.head_size)
             native_key = query.new_empty(native_shape)
             native_value = query.new_empty(native_shape)
+
+        num_decode_tokens = attn_metadata.num_decode_tokens
+        split_mixed = (
+            backend == "hmx"
+            and write_cache
+            and os.environ.get("QAIC_SPLIT_MIXED_PAGED_ATTN", "1") != "0"
+            and 0 < num_decode_tokens < num_actual_tokens
+            and num_decode_tokens < attn_metadata.seq_lens.shape[0]
+            and num_decode_tokens + 1 < attn_metadata.query_start_loc.shape[0]
+        )
+        if split_mixed:
+            try:
+                min_decode_reqs = int(
+                    os.environ.get("QAIC_SPLIT_MIXED_MIN_DECODE_REQS", "4")
+                )
+            except ValueError:
+                min_decode_reqs = 4
+            split_mixed = num_decode_tokens >= max(1, min_decode_reqs)
+
+        if split_mixed:
+            # print("SPLIT MIXED BATCH ATTENTION !!!")
+            # exit()
+            assert native_key is not None
+            assert native_value is not None
+            decode_out = qaic_ops.paged_attention(
+                query[:num_decode_tokens],
+                native_key[:num_decode_tokens],
+                native_value[:num_decode_tokens],
+                key_cache,
+                value_cache,
+                attn_metadata.block_table[:num_decode_tokens],
+                attn_metadata.slot_mapping_i32[:num_decode_tokens],
+                attn_metadata.query_start_loc[: num_decode_tokens + 1],
+                attn_metadata.seq_lens[:num_decode_tokens],
+                self.scale,
+                attn_metadata.causal,
+                write_cache=True,
+            )
+            output[:num_decode_tokens].copy_(
+                decode_out.reshape_as(output[:num_decode_tokens])
+            )
+
+            prefill_start_loc = (
+                attn_metadata.query_start_loc[num_decode_tokens:] - num_decode_tokens
+            ).contiguous()
+            prefill_out = qaic_ops.paged_attention(
+                query[num_decode_tokens:num_actual_tokens],
+                native_key[num_decode_tokens:num_actual_tokens],
+                native_value[num_decode_tokens:num_actual_tokens],
+                key_cache,
+                value_cache,
+                attn_metadata.block_table[num_decode_tokens:],
+                attn_metadata.slot_mapping_i32[num_decode_tokens:num_actual_tokens],
+                prefill_start_loc,
+                attn_metadata.seq_lens[num_decode_tokens:],
+                self.scale,
+                attn_metadata.causal,
+                write_cache=True,
+            )
+            output[num_decode_tokens:num_actual_tokens].copy_(
+                prefill_out.reshape_as(output[num_decode_tokens:num_actual_tokens])
+            )
+            return True
 
         native_out = qaic_ops.paged_attention(
             query[:num_actual_tokens],
