@@ -84,7 +84,7 @@ class QAicTorchAttentionBackend(AttentionBackend):
         head_size: int,
         cache_dtype_str: str = "auto",
     ) -> tuple[int, ...]:
-        return 2, num_blocks, num_kv_heads, block_size, head_size
+        return num_blocks, num_kv_heads, block_size, 2 * head_size
 
     @staticmethod
     def use_cascade_attention(*args, **kwargs) -> bool:
@@ -298,7 +298,7 @@ class QAicAttentionBackendImpl(AttentionImpl):
             key: shape = [num_tokens, num_kv_heads, head_size]
             value: shape = [num_tokens, num_kv_heads, head_size]
             kv_cache: shape =
-                [2, num_blocks, num_kv_heads, block_size, head_size]
+                [num_blocks, num_kv_heads, block_size, 2 * head_size]
             attn_metadata: Metadata for attention.
         Returns:
             shape = [num_tokens, num_heads * head_size]
@@ -331,7 +331,7 @@ class QAicAttentionBackendImpl(AttentionImpl):
                 self.attn_type,
             )
 
-        key_cache, value_cache = kv_cache.unbind(0)
+        key_cache, value_cache = kv_cache.split(self.head_size, dim=-1)
         if self._run_native_paged_attention(
             query=query,
             key=key,

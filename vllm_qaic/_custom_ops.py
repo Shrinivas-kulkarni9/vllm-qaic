@@ -419,6 +419,18 @@ def _paged_attention_op(
     num_reqs = seq_lens.shape[0]
     max_blocks_per_seq = block_table.shape[1]
 
+    if (
+        key_cache.shape != value_cache.shape
+        or key_cache.stride() != value_cache.stride()
+        or key_cache.stride(-1) != 1
+    ):
+        raise ValueError(
+            "Paged attention requires matching K/V strides and dense heads"
+        )
+    cache_strides = key_cache.stride()[:3]
+    if any(s <= 0 or s > 2**31 - 1 for s in cache_strides):
+        raise ValueError("Paged attention cache strides must fit positive int32")
+
     backend = os.environ.get("QAIC_PAGED_ATTN_BACKEND")
     if backend is None:
         backend = "hvx" if os.environ.get("QAIC_PAGED_ATTN_HMX", "1") == "0" else "hmx"
@@ -472,6 +484,7 @@ def _paged_attention_op(
             num_kv_heads,
             head_dim,
             block_size,
+            *cache_strides,
         )
     if use_hmx and not write_cache:
         attn_kernel[_NSP_COUNT, _HMX_THREAD_COUNT](
@@ -491,6 +504,7 @@ def _paged_attention_op(
             max_blocks_per_seq,
             int(causal),
             float(scale),
+            *cache_strides,
         )
     elif use_hmx:
         attn_kernel[_NSP_COUNT, _HMX_THREAD_COUNT](
@@ -513,6 +527,7 @@ def _paged_attention_op(
             max_blocks_per_seq,
             int(causal),
             float(scale),
+            *cache_strides,
         )
     else:
         attn_kernel[_NSP_COUNT, _THREAD_COUNT](
@@ -532,6 +547,7 @@ def _paged_attention_op(
             max_blocks_per_seq,
             int(causal),
             float(scale),
+            *cache_strides,
         )
     return output
 
