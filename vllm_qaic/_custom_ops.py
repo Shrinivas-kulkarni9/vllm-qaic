@@ -918,7 +918,6 @@ def paged_attention(
     causal: bool = True,
     write_cache: bool = True,
 ) -> Tensor:
-    """Public test/development entry point for the QAIC paged-attention MVP."""
     return _paged_attention_op(
         query,
         key,

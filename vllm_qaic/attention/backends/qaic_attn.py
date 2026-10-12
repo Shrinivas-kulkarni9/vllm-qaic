@@ -443,8 +443,6 @@ class QAicAttentionBackendImpl(AttentionImpl):
             split_mixed = num_decode_tokens >= max(1, min_decode_reqs)
 
         if split_mixed:
-            # print("SPLIT MIXED BATCH ATTENTION !!!")
-            # exit()
             assert native_key is not None
             assert native_value is not None
             decode_out = qaic_ops.paged_attention(
