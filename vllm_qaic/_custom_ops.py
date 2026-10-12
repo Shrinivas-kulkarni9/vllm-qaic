@@ -706,6 +706,8 @@ def unquantized_fused_moe_hmx(
         apply_router_weight_on_input,
         has_expert_map,
     )
+
+
 @torch.library.custom_op(
     "qaic::paged_attention",
     mutates_args=("key_cache", "value_cache"),
